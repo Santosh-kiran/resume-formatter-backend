@@ -1,35 +1,110 @@
 from fastapi import FastAPI, UploadFile, File
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+from docx import Document
 import shutil
+import uuid
 import os
-from parser import extract_text
-from formatter import generate_docx
 
 app = FastAPI()
 
-UPLOAD_DIR = "uploads"
-OUTPUT_DIR = "outputs"
-
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-os.makedirs(OUTPUT_DIR, exist_ok=True)
+# Enable CORS for frontend (Vercel)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # You can restrict later
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.get("/")
-def health():
+def root():
     return {"status": "running"}
+
 
 @app.post("/upload")
 async def upload_resume(file: UploadFile = File(...)):
-    file_path = os.path.join(UPLOAD_DIR, file.filename)
 
-    with open(file_path, "wb") as buffer:
+    if not file.filename.endswith(".docx"):
+        return JSONResponse(
+            status_code=400,
+            content={"error": "Only .docx files are supported"}
+        )
+
+    # Save uploaded file
+    input_path = f"/tmp/{uuid.uuid4()}.docx"
+
+    with open(input_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
-    text = extract_text(file_path)
+    try:
+        original_doc = Document(input_path)
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Invalid DOCX file"}
+        )
 
-    output_path, filename = generate_docx(text)
+    # Extract text
+    content = [p.text.strip() for p in original_doc.paragraphs if p.text.strip()]
+
+    if not content:
+        return JSONResponse(
+            status_code=400,
+            content={"error": "Resume appears empty"}
+        )
+
+    # Create new formatted document
+    new_doc = Document()
+
+    # Add Name
+    new_doc.add_heading(content[0], level=0)
+
+    # Simple section detection
+    summary = []
+    skills = []
+    experience = []
+    education = []
+
+    for line in content[1:]:
+        lower = line.lower()
+
+        if "skill" in lower:
+            skills.append(line)
+        elif "experience" in lower:
+            experience.append(line)
+        elif "education" in lower:
+            education.append(line)
+        else:
+            summary.append(line)
+
+    # Add Sections Properly
+    if summary:
+        new_doc.add_heading("Professional Summary", level=1)
+        for s in summary[:5]:
+            new_doc.add_paragraph(s)
+
+    if skills:
+        new_doc.add_heading("Technical Skills", level=1)
+        for s in skills:
+            new_doc.add_paragraph(s)
+
+    if experience:
+        new_doc.add_heading("Professional Experience", level=1)
+        for e in experience:
+            new_doc.add_paragraph(e)
+
+    if education:
+        new_doc.add_heading("Education", level=1)
+        for ed in education:
+            new_doc.add_paragraph(ed)
+
+    # Save formatted resume
+    output_path = f"/tmp/formatted_{uuid.uuid4()}.docx"
+    new_doc.save(output_path)
 
     return FileResponse(
-        path=output_path,
-        filename=filename,
-        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        output_path,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        filename="Formatted_Resume.docx"
     )

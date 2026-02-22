@@ -25,7 +25,13 @@ def root():
 @app.post("/upload")
 async def upload_resume(file: UploadFile = File(...)):
 
-    if not file.filename.endswith(".docx"):
+    filename = file.filename.lower()
+
+if not filename.endswith(".docx"):
+    return JSONResponse(
+        status_code=400,
+        content={"error": "Please upload a .docx file (Word document)"}
+    )
         return JSONResponse(
             status_code=400,
             content={"error": "Only .docx files are supported"}
@@ -108,4 +114,5 @@ async def upload_resume(file: UploadFile = File(...)):
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         filename="Formatted_Resume.docx"
     )
+
 

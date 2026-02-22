@@ -19,7 +19,7 @@ app.add_middleware(
 
 @app.get("/")
 def root():
-    return {"status": "running"}
+    return {"status": "THIS IS NEW VERSION"}
 
 
 @app.post("/upload")
@@ -108,3 +108,4 @@ async def upload_resume(file: UploadFile = File(...)):
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         filename="Formatted_Resume.docx"
     )
+
